@@ -1,0 +1,164 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from fpdf import FPDF
+
+# Define categories and weights
+categories = {
+    "Founder Traits": 0.30,
+    "Execution Ability": 0.30,
+    "Industry & Network Strength": 0.25,
+    "Investor Fit": 0.15
+}
+
+# Define the scorecard criteria
+criteria = {
+    "Founder Traits": [
+        ("Vision Clarity", "How well the founders articulate their vision, problem, and solution."),
+        ("Leadership Presence", "Can the founder inspire confidence and drive execution?"),
+        ("Passion & Industry Knowledge", "Does the founder have deep knowledge of the market?"),
+        ("Soft Skills & Coachability", "Can the founder take feedback and adapt quickly?")
+    ],
+    "Execution Ability": [
+        ("Hustle & Problem-Solving", "Has the team executed anything tangible? Can they overcome challenges?"),
+        ("Team Completeness", "Does the team cover critical business & tech roles?"),
+        ("Market Sentiment", "What do customers, industry peers, and experts say about the startup?"),
+        ("Team Balance & Dynamics", "Do the co-founders work well together?")
+    ],
+    "Industry & Network Strength": [
+        ("Industry Experience", "Does the team have relevant experience in this sector?"),
+        ("Network & Ability to Attract Talent", "Can the founders bring in top advisors, employees, or investors?")
+    ],
+    "Investor Fit": [
+        ("Investor Confidence", "Does the investor feel strongly about this team?")
+    ]
+}
+
+# Collect startup information
+startup_name = input("Enter the Startup Name: ")
+
+# Collect scores
+scores = {}
+for category, items in criteria.items():
+    scores[category] = []
+    print(f"\n{category} (Weight: {categories[category]*100}%)")
+    for criterion, description in items:
+        while True:
+            try:
+                print(f"\n{criterion}: {description}")
+                score = float(input("Enter a score (1-10): "))
+                if 1 <= score <= 10:
+                    scores[category].append(score)
+                    break
+                else:
+                    print("Invalid score. Please enter a number between 1 and 10.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+# Calculate average scores per category
+average_scores = {category: sum(scores[category]) / len(scores[category]) for category in scores}
+weighted_scores = {category: average_scores[category] * categories[category] for category in categories}
+
+# Calculate final weighted score (out of 100)
+final_score = sum(weighted_scores.values())
+
+# Generate recommendation based on final score
+if final_score >= 90:
+    recommendation = "Outstanding Team: Highly investable!"
+elif final_score >= 75:
+    recommendation = "Strong Team: Worth considering with minor improvements."
+elif final_score >= 50:
+    recommendation = "Needs Improvement: Promising but requires significant work."
+else:
+    recommendation = "High Risk: Major concerns. Needs substantial changes."
+
+# Generate radar chart (Fix scaling issue)
+def generate_radar_chart(scores, startup_name):
+    labels = list(scores.keys())
+    values = list(scores.values())
+
+    # Normalize values (scale 1-10) so the outermost ring represents 10
+    max_score = 10
+    normalized_values = [v / max_score * 10 for v in values]
+
+    # Convert data into circular format
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
+    normalized_values += normalized_values[:1]  # Close the chart
+    angles += angles[:1]
+
+    fig, ax = plt.subplots(figsize=(7, 7), subplot_kw=dict(polar=True))
+
+    # Set limits to ensure the outer circle is always 10
+    ax.set_ylim(0, 10)
+
+    # Improved layout to prevent text cutoff
+    ax.set_theta_offset(np.pi / 2)  # Start at top
+    ax.set_theta_direction(-1)  # Clockwise rotation
+
+    # Draw chart
+    ax.fill(angles, normalized_values, color='blue', alpha=0.25)
+    ax.plot(angles, normalized_values, color='blue', linewidth=2)
+
+    # Fix labels placement
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels, fontsize=10, ha='center', rotation=20, va="top")
+
+    # Grid with meaningful values
+    ax.set_yticks([2, 4, 6, 8, 10])
+    ax.set_yticklabels(["2", "4", "6", "8", "10"])
+
+    # Set title with extra padding to prevent overlap
+    plt.title(f"{startup_name} Scorecard", fontsize=14, pad=20)
+
+    # Save the figure
+    plt.savefig("radar_chart.png", bbox_inches="tight", dpi=300)
+    plt.close()
+
+generate_radar_chart(average_scores, startup_name)
+
+# Generate PDF Report with final score and recommendations
+class PDF(FPDF):
+    def header(self):
+        self.set_font("Arial", "B", 16)
+        self.cell(200, 10, f"Startup Scorecard Report", ln=True, align="C")
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Arial", "I", 10)
+        self.cell(0, 10, "Generated by Scorecard App", align="C")
+
+pdf = PDF()
+pdf.set_auto_page_break(auto=True, margin=15)
+pdf.add_page()
+
+pdf.set_font("Arial", "B", 14)
+pdf.cell(200, 10, f"Startup: {startup_name}", ln=True, align="C")
+
+pdf.set_font("Arial", "B", 12)
+pdf.cell(0, 10, "Score Breakdown:", ln=True)
+
+for category, items in criteria.items():
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(0, 10, f"{category} (Weight: {categories[category]*100}%)", ln=True)
+    
+    pdf.set_font("Arial", "", 10)
+    for i, (criterion, description) in enumerate(items):
+        pdf.cell(0, 7, f"{criterion}: {scores[category][i]}/10", ln=True)
+
+pdf.cell(0, 10, "", ln=True)  # Empty line for spacing
+
+# Insert radar chart
+pdf.image("radar_chart.png", x=40, w=120)
+
+# Final Score and Recommendation (Now Fixed)
+pdf.set_font("Arial", "B", 12)
+pdf.cell(0, 10, "", ln=True)  # Empty space
+pdf.cell(0, 10, f"Final Score: {final_score:.2f}/100", ln=True)
+
+pdf.set_font("Arial", "", 12)
+pdf.cell(0, 10, "Recommendation:", ln=True)  # Title
+pdf.multi_cell(0, 10, recommendation)  # Corrected version without 'ln'
+
+# Save PDF
+pdf.output(f"{startup_name}_Scorecard.pdf")
+print(f"✅ PDF report generated: {startup_name}_Scorecard.pdf")
